@@ -1,0 +1,53 @@
+name: Build MPC-HC (Patched)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
+
+    - name: Setup Visual Studio Environment
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+
+    - name: Install YASM
+      run: choco install yasm -y
+
+    - name: Install Windows SDK 8.1
+      run: choco install windows-sdk-8.1 -y
+
+    - name: Setup MSYS2 & MinGW64
+      uses: msys2/setup-msys2@v2
+      with:
+        install: mingw-w64-x86_64-gcc
+
+    - name: Set MPCHC_MINGW64 Environment Variable
+      run: echo "MPCHC_MINGW64=C:\msys64\mingw64" >> $env:GITHUB_ENV
+      shell: pwsh
+
+    # Optional: Add this step ONLY if LAVFilters fails with "input line too long"
+    # - name: Map Drive for Short Paths (LAVFilters workaround)
+    #   run: subst Z: .
+    #   shell: cmd
+    #   if: failure()  # Only run if previous step failed
+
+    - name: Build Release x64
+      run: .\build.bat release x64
+      # Optional: Add shell: cmd if batch script has issues in PowerShell
+
+    - name: Upload Build Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: MPC-HC-Patched-x64
+        path: bin/mpc-hc_x64/
+      if: success()
