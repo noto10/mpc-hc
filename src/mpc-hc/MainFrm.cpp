@@ -9272,10 +9272,14 @@ void CMainFrame::OnPlayStop(bool is_closing)
     m_wndSeekBar.SetPos(0);
     if (GetLoadState() == MLS::LOADED) {
         if (GetPlaybackMode() == PM_FILE) {
+            // Fork fix #1595: Keep media engine position intact for MRU/history saving
+            // Only skip reset when is_closing=false (manual Stop)
+            /*
             if (!is_closing) {
                 LONGLONG pos = 0;
                 m_pMS->SetPositions(&pos, AM_SEEKING_AbsolutePositioning, nullptr, AM_SEEKING_NoPositioning);
             }
+            */
             MediaControlStop(true);
             if (m_bUseSeekPreview) {
                 MediaControlStopPreview();
