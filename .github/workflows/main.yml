@@ -6,7 +6,7 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     
     steps:
     - name: Checkout repository
@@ -30,24 +30,28 @@ jobs:
       uses: msys2/setup-msys2@v2
       with:
         install: mingw-w64-x86_64-gcc
+        cache: true
+        update: false
 
-    - name: Set MPCHC_MINGW64 Environment Variable
-      run: echo "MPCHC_MINGW64=C:\msys64\mingw64" >> $env:GITHUB_ENV
+    - name: Configure MinGW PATH & Environment
+      run: |
+        # FIX 1: Add MinGW binaries to Windows PATH so batch scripts can find gcc.exe
+        echo "C:\msys64\mingw64\bin" >> $env:GITHUB_PATH
+        # FIX 2: Set required env var for MPC-HC build system
+        echo "MPCHC_MINGW64=C:\msys64\mingw64" >> $env:GITHUB_ENV
       shell: pwsh
 
-    # Optional: Add this step ONLY if LAVFilters fails with "input line too long"
-    # - name: Map Drive for Short Paths (LAVFilters workaround)
-    #   run: subst Z: .
-    #   shell: cmd
-    #   if: failure()  # Only run if previous step failed
-
     - name: Build Release x64
-      run: .\build.bat release x64
-      # Optional: Add shell: cmd if batch script has issues in PowerShell
+      run: |
+        # FIX 3: Map repo to Z: drive to bypass Windows CMD 8191-char limit (LAVFilters)
+        subst Z: .
+        cd /d Z:\
+        call build.bat release x64
+      shell: cmd
 
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v4
       with:
         name: MPC-HC-Patched-x64
-        path: bin/mpc-hc_x64/
+        path: Z:\bin\mpc-hc_x64\
       if: success()
