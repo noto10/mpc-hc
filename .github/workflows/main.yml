@@ -23,7 +23,11 @@ jobs:
     - name: Install YASM
       run: choco install yasm -y
 
-    # 1. Setup MSYS2 (Provides GCC for FFmpeg/LAVFilters)
+    # 🔧 FIX 1: Install Windows SDK 8.1 (Required by MPC-HC project files)
+    - name: Install Windows SDK 8.1
+      run: choco install windows-sdk-8.1 -y
+
+    # 🔧 FIX 2: Setup MSYS2 & MinGW64
     - name: Setup MSYS2 & MinGW64
       uses: msys2/setup-msys2@v2
       with:
@@ -31,17 +35,26 @@ jobs:
         cache: true
         update: false
 
-    # 2. Create build.user.bat
-    # This file is explicitly called by MPC-HC build scripts to set paths.
-    # This ensures MPCHC_MINGW64 and PATH are set for ALL batch scripts.
-    - name: Create build.user.bat
+    # 🔧 FIX 3: Configure Environment Safely (Avoids PATH corruption)
+    - name: Configure Build Environment
       run: |
-        echo "SET MPCHC_MINGW64=C:\msys64\mingw64" > build.user.bat
-        echo "SET PATH=C:\msys64\mingw64\bin;%%PATH%%" >> build.user.bat
-        type build.user.bat
+        # Set variables for MPC-HC build scripts
+        echo "MPCHC_MINGW64=C:\msys64\mingw64" >> $env:GITHUB_ENV
+        echo "MPCHC_GIT=C:\Program Files\Git" >> $env:GITHUB_ENV
+        
+        # Add MinGW and Git Bash to PATH using GitHub's native method
+        echo "C:\msys64\mingw64\bin" >> $env:GITHUB_PATH
+        echo "C:\Program Files\Git\usr\bin" >> $env:GITHUB_PATH
+        
+        # Create a clean build.user.bat WITHOUT modifying PATH
+        @"
+        SET MPCHC_MINGW64=C:\msys64\mingw64
+        SET MPCHC_GIT=C:\Program Files\Git
+        "@ | Out-File -FilePath build.user.bat -Encoding ASCII
+      shell: pwsh
 
-    # 3. Map drive to Z: to bypass Windows CMD 8191-char limit
-    - name: Map Drive and Build
+    # 🔧 FIX 4: Map to Z: drive (Prevents "Input line too long" in LAVFilters)
+    - name: Build Release x64
       run: |
         subst Z: .
         cd /d Z:\
@@ -52,5 +65,5 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: MPC-HC-Patched-x64
-        path: bin/mpc-hc_x64/
+        path: Z:\bin\mpc-hc_x64\
       if: success()
