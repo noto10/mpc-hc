@@ -23,11 +23,6 @@ jobs:
     - name: Install YASM
       run: choco install yasm -y
 
-    # 🔧 FIX 1: Install Windows SDK 8.1 (Required by MPC-HC project files)
-    - name: Install Windows SDK 8.1
-      run: choco install windows-sdk-8.1 -y
-
-    # 🔧 FIX 2: Setup MSYS2 & MinGW64
     - name: Setup MSYS2 & MinGW64
       uses: msys2/setup-msys2@v2
       with:
@@ -35,27 +30,33 @@ jobs:
         cache: true
         update: false
 
-    # 🔧 FIX 3: Configure Environment Safely (Avoids PATH corruption)
+    # 🔧 CRITICAL FIX: Fully configure environment for MPC-HC batch scripts
     - name: Configure Build Environment
       run: |
-        # Set variables for MPC-HC build scripts
+        # Set variables for GitHub Actions runner
         echo "MPCHC_MINGW64=C:\msys64\mingw64" >> $env:GITHUB_ENV
+        echo "MPCHC_MSYS=C:\msys64" >> $env:GITHUB_ENV
         echo "MPCHC_GIT=C:\Program Files\Git" >> $env:GITHUB_ENV
         
-        # Add MinGW and Git Bash to PATH using GitHub's native method
+        # Add MinGW and Git Bash to PATH for the runner
         echo "C:\msys64\mingw64\bin" >> $env:GITHUB_PATH
         echo "C:\Program Files\Git\usr\bin" >> $env:GITHUB_PATH
         
-        # Create a clean build.user.bat WITHOUT modifying PATH
+        # Create build.user.bat with explicit PATH expansion for MSBuild NMake steps
         @"
         SET MPCHC_MINGW64=C:\msys64\mingw64
+        SET MPCHC_MSYS=C:\msys64
         SET MPCHC_GIT=C:\Program Files\Git
+        SET PATH=C:\msys64\mingw64\bin;%%PATH%%
         "@ | Out-File -FilePath build.user.bat -Encoding ASCII
+        
+        Write-Host "Generated build.user.bat:"
+        Get-Content build.user.bat
       shell: pwsh
 
-    # 🔧 FIX 4: Map to Z: drive (Prevents "Input line too long" in LAVFilters)
     - name: Build Release x64
       run: |
+        # Map to Z: to bypass Windows CMD 8191-character limit for LAVFilters
         subst Z: .
         cd /d Z:\
         call build.bat release x64
