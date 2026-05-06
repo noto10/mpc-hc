@@ -1,31 +1,32 @@
 name: Build MPC-HC (Patched)
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Allows manual trigger
 
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 90
+    timeout-minutes: 60
     
     steps:
+    # 1. Checkout Code
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
         submodules: recursive
         fetch-depth: 0
 
+    # 2. Setup Visual Studio Environment (Provides lib.exe, cl.exe, etc.)
     - name: Setup Visual Studio Environment
       uses: ilammy/msvc-dev-cmd@v1
       with:
         arch: x64
 
+    # 3. Install YASM (Required for assembly files)
     - name: Install YASM
       run: choco install yasm -y
 
-    - name: Install Windows SDK 8.1
-      run: choco install windows-sdk-8.1 -y
-
+    # 4. Setup MSYS2 & MinGW64 (Provides gcc, sh, make, etc.)
     - name: Setup MSYS2 & MinGW64
       uses: msys2/setup-msys2@v2
       with:
@@ -33,25 +34,34 @@ jobs:
         cache: true
         update: false
 
-    - name: Configure MinGW PATH & Environment
+    # 5. Configure Environment Variables for Build Scripts
+    - name: Configure MinGW Path & Env Vars
       run: |
-        # FIX 1: Add MinGW binaries to Windows PATH so batch scripts can find gcc.exe
+        # Add MinGW binaries to PATH so 'gcc' and 'sh' are found globally
         echo "C:\msys64\mingw64\bin" >> $env:GITHUB_PATH
-        # FIX 2: Set required env var for MPC-HC build system
+        echo "C:\msys64\usr\bin" >> $env:GITHUB_PATH
+        
+        # Set the required env var for MPC-HC scripts
         echo "MPCHC_MINGW64=C:\msys64\mingw64" >> $env:GITHUB_ENV
       shell: pwsh
 
+    # 6. Build Project on Short Path (Fixes "Input Line Too Long" for LAVFilters)
     - name: Build Release x64
       run: |
-        # FIX 3: Map repo to Z: drive to bypass Windows CMD 8191-char limit (LAVFilters)
+        :: Map current directory to Z: to keep paths short (e.g., Z:\src instead of D:\a\mpc-hc\...)
         subst Z: .
+        
+        :: Switch to Z: drive
         cd /d Z:\
+        
+        :: Run the standard build script
         call build.bat release x64
       shell: cmd
 
+    # 7. Upload Artifact
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v4
       with:
         name: MPC-HC-Patched-x64
-        path: Z:\bin\mpc-hc_x64\
+        path: bin/mpc-hc_x64/
       if: success()
