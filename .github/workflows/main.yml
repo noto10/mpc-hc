@@ -1,7 +1,7 @@
 name: Build MPC-HC (Patched)
 
 on:
-  workflow_dispatch: # Allows manual trigger
+  workflow_dispatch:
 
 jobs:
   build:
@@ -9,24 +9,21 @@ jobs:
     timeout-minutes: 60
     
     steps:
-    # 1. Checkout Code
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
         submodules: recursive
         fetch-depth: 0
 
-    # 2. Setup Visual Studio Environment (Provides lib.exe, cl.exe, etc.)
     - name: Setup Visual Studio Environment
       uses: ilammy/msvc-dev-cmd@v1
       with:
         arch: x64
 
-    # 3. Install YASM (Required for assembly files)
     - name: Install YASM
       run: choco install yasm -y
 
-    # 4. Setup MSYS2 & MinGW64 (Provides gcc, sh, make, etc.)
+    # 1. Setup MSYS2 (Provides GCC for FFmpeg/LAVFilters)
     - name: Setup MSYS2 & MinGW64
       uses: msys2/setup-msys2@v2
       with:
@@ -34,31 +31,23 @@ jobs:
         cache: true
         update: false
 
-    # 5. Configure Environment Variables for Build Scripts
-    - name: Configure MinGW Path & Env Vars
+    # 2. Create build.user.bat
+    # This file is explicitly called by MPC-HC build scripts to set paths.
+    # This ensures MPCHC_MINGW64 and PATH are set for ALL batch scripts.
+    - name: Create build.user.bat
       run: |
-        # Add MinGW binaries to PATH so 'gcc' and 'sh' are found globally
-        echo "C:\msys64\mingw64\bin" >> $env:GITHUB_PATH
-        echo "C:\msys64\usr\bin" >> $env:GITHUB_PATH
-        
-        # Set the required env var for MPC-HC scripts
-        echo "MPCHC_MINGW64=C:\msys64\mingw64" >> $env:GITHUB_ENV
-      shell: pwsh
+        echo "SET MPCHC_MINGW64=C:\msys64\mingw64" > build.user.bat
+        echo "SET PATH=C:\msys64\mingw64\bin;%%PATH%%" >> build.user.bat
+        type build.user.bat
 
-    # 6. Build Project on Short Path (Fixes "Input Line Too Long" for LAVFilters)
-    - name: Build Release x64
+    # 3. Map drive to Z: to bypass Windows CMD 8191-char limit
+    - name: Map Drive and Build
       run: |
-        :: Map current directory to Z: to keep paths short (e.g., Z:\src instead of D:\a\mpc-hc\...)
         subst Z: .
-        
-        :: Switch to Z: drive
         cd /d Z:\
-        
-        :: Run the standard build script
         call build.bat release x64
       shell: cmd
 
-    # 7. Upload Artifact
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v4
       with:
