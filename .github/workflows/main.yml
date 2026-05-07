@@ -5,65 +5,91 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: windows-2022
     timeout-minutes: 60
-    
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        submodules: recursive
-        fetch-depth: 0
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
 
-    - name: Setup Visual Studio Environment
-      uses: ilammy/msvc-dev-cmd@v1
-      with:
-        arch: x64
+      # Install required assembler
+      - name: Install YASM
+        shell: pwsh
+        run: |
+          choco install yasm -y
 
-    - name: Install YASM
-      run: choco install yasm -y
+      # Required by older MPC-HC project files
+      - name: Install Windows SDK 8.1
+        shell: pwsh
+        run: |
+          choco install windows-sdk-8.1 -y
 
-    # 🔧 FIX 1: Install Windows SDK 8.1 (Required by MPC-HC project files)
-    - name: Install Windows SDK 8.1
-      run: choco install windows-sdk-8.1 -y
+      # Setup MSYS2 / MinGW
+      - name: Setup MSYS2 & MinGW64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          cache: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            make
+            yasm
+            nasm
+            diffutils
 
-    # 🔧 FIX 2: Setup MSYS2 & MinGW64
-    - name: Setup MSYS2 & MinGW64
-      uses: msys2/setup-msys2@v2
-      with:
-        install: mingw-w64-x86_64-gcc
-        cache: true
-        update: false
+      # Configure MPC-HC-specific environment
+      - name: Configure Build Environment
+        shell: pwsh
+        run: |
+          # Environment variables used by MPC-HC scripts
+          echo "MPCHC_MINGW64=C:\msys64\mingw64" >> $env:GITHUB_ENV
+          echo "MPCHC_GIT=C:\Program Files\Git" >> $env:GITHUB_ENV
 
-    # 🔧 FIX 3: Configure Environment Safely (Avoids PATH corruption)
-    - name: Configure Build Environment
-      run: |
-        # Set variables for MPC-HC build scripts
-        echo "MPCHC_MINGW64=C:\msys64\mingw64" >> $env:GITHUB_ENV
-        echo "MPCHC_GIT=C:\Program Files\Git" >> $env:GITHUB_ENV
-        
-        # Add MinGW and Git Bash to PATH using GitHub's native method
-        echo "C:\msys64\mingw64\bin" >> $env:GITHUB_PATH
-        echo "C:\Program Files\Git\usr\bin" >> $env:GITHUB_PATH
-        
-        # Create a clean build.user.bat WITHOUT modifying PATH
-        @"
-        SET MPCHC_MINGW64=C:\msys64\mingw64
-        SET MPCHC_GIT=C:\Program Files\Git
-        "@ | Out-File -FilePath build.user.bat -Encoding ASCII
-      shell: pwsh
+          # Create build.user.bat
+          @"
+          SET MPCHC_MINGW64=C:\msys64\mingw64
+          SET MPCHC_GIT=C:\Program Files\Git
+          "@ | Out-File -FilePath build.user.bat -Encoding ASCII
 
-    # 🔧 FIX 4: Map to Z: drive (Prevents "Input line too long" in LAVFilters)
-    - name: Build Release x64
-      run: |
-        subst Z: .
-        cd /d Z:\
-        call build.bat release x64
-      shell: cmd
+      # MAIN FIX:
+      # - Removes PATH overflow
+      # - Avoids cmd.exe parser corruption
+      # - Prevents ffmpeg.bat / LAVFilters failures
+      - name: Build Release x64
+        shell: cmd
+        run: |
+          REM Shorten working path
+          subst Z: .
 
-    - name: Upload Build Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: MPC-HC-Patched-x64
-        path: Z:\bin\mpc-hc_x64\
-      if: success()
+          REM Completely reset PATH
+          set "PATH=C:\Windows\system32;C:\Windows"
+
+          REM Load Visual Studio build tools ONLY ONCE
+          call "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
+
+          REM Add only the tools actually needed
+          set "PATH=%PATH%;C:\Program Files\Git\bin"
+          set "PATH=%PATH%;C:\Program Files\Git\usr\bin"
+          set "PATH=%PATH%;C:\msys64\usr\bin"
+          set "PATH=%PATH%;C:\msys64\mingw64\bin"
+
+          REM Optional debugging
+          echo ==== PATH LENGTH ====
+          powershell -NoProfile -Command "$env:PATH.Length"
+
+          echo ==== BUILD START ====
+
+          cd /d Z:\
+
+          call build.bat release x64
+
+      - name: Upload Build Artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MPC-HC-Patched-x64
+          path: Z:\bin\mpc-hc_x64\
