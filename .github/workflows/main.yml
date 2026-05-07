@@ -8,11 +8,11 @@ on:
 jobs:
   build:
     runs-on: windows-2022
-    timeout-minutes: 90
+    timeout-minutes: 120
 
     steps:
       #
-      # Checkout repository
+      # Checkout source
       #
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -23,7 +23,7 @@ jobs:
       #
       # Install Windows SDK 8.1
       #
-      # Required by older MPC-HC build scripts
+      # Required by legacy MPC-HC build scripts
       #
       - name: Install Windows SDK 8.1
         shell: pwsh
@@ -33,8 +33,7 @@ jobs:
       #
       # Setup MSYS2 / MinGW
       #
-      # path-type:minimal is critical:
-      # it avoids PATH explosion on Windows runners
+      # path-type:minimal avoids catastrophic PATH growth
       #
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2
@@ -45,13 +44,14 @@ jobs:
           cache: true
           install: >-
             mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-binutils
             make
             yasm
             nasm
             diffutils
 
       #
-      # Create MPC-HC environment file
+      # Create MPC-HC environment overrides
       #
       - name: Create build.user.bat
         shell: cmd
@@ -67,43 +67,47 @@ jobs:
       - name: Build Release x64
         shell: cmd
         run: |
-          REM ==========================================
-          REM Map repository to short drive path
-          REM ==========================================
+          REM ==================================================
+          REM Short repository path
+          REM ==================================================
           subst Z: "%GITHUB_WORKSPACE%"
 
-          REM ==========================================
-          REM HARD RESET PATH
-          REM Prevent Windows cmd overflow
-          REM ==========================================
-          set "PATH=C:\Windows\system32;C:\Windows;C:\Windows\System32\WindowsPowerShell\v1.0"
+          REM ==================================================
+          REM Preserve MSYS2 integration
+          REM ==================================================
+          set MSYSTEM=MINGW64
+          set CHERE_INVOKING=1
 
-          REM ==========================================
-          REM Add PowerShell 7
-          REM ==========================================
-          set "PATH=%PATH%;C:\Program Files\PowerShell\7"
-
-          REM ==========================================
+          REM ==================================================
           REM Load Visual Studio environment
-          REM ==========================================
+          REM ==================================================
           call "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
 
-          REM ==========================================
+          REM ==================================================
           REM Force Windows SDK 8.1
-          REM ==========================================
+          REM ==================================================
           set "WindowsSDKVersion=8.1\"
           set "WindowsSdkDir=C:\Program Files (x86)\Windows Kits\8.1\"
 
-          REM ==========================================
-          REM Add ONLY required tools
-          REM Avoid GNU link.exe collisions
-          REM ==========================================
-          set "PATH=%PATH%;C:\Program Files\Git\bin"
-          set "PATH=%PATH%;C:\msys64\mingw64\bin"
+          REM ==================================================
+          REM Reduce only known PATH bloat
+          REM Do NOT fully reset PATH
+          REM ==================================================
+          set "PATH=%PATH:C:\Strawberry\perl\bin;=%"
 
-          REM ==========================================
-          REM Debugging
-          REM ==========================================
+          REM ==================================================
+          REM Ensure MinGW tools are reachable
+          REM ==================================================
+          set "PATH=C:\msys64\mingw64\bin;%PATH%"
+
+          REM ==================================================
+          REM Ensure MSVC linker precedes GNU link.exe
+          REM ==================================================
+          set "PATH=%VCToolsInstallDir%bin\Hostx64\x64;%PATH%"
+
+          REM ==================================================
+          REM Debugging output
+          REM ==================================================
           echo ======================================
           echo PATH LENGTH:
           powershell -NoProfile -Command "$env:PATH.Length"
@@ -111,26 +115,28 @@ jobs:
 
           echo.
           echo ==== TOOL LOCATIONS ====
+          where gcc
+          where x86_64-w64-mingw32-gcc
+          where yasm
+          where nasm
           where cl
           where link
-          where gcc
-          where yasm
           where powershell
           where pwsh
           echo ========================
           echo.
 
-          REM ==========================================
-          REM Verify SDK 8.1 exists
-          REM ==========================================
+          REM ==================================================
+          REM Validate SDK 8.1 presence
+          REM ==================================================
           if not exist "C:\Program Files (x86)\Windows Kits\8.1\Include" (
             echo ERROR: Windows SDK 8.1 Include directory missing
             exit /b 1
           )
 
-          REM ==========================================
-          REM Start build
-          REM ==========================================
+          REM ==================================================
+          REM Build
+          REM ==================================================
           cd /d Z:\
 
           call build.bat release x64
