@@ -1,93 +1,78 @@
 @ECHO OFF
-SETLOCAL EnableDelayedExpansion
-
-IF /I "%~1"=="help" GOTO SHOWHELP
-IF /I "%~1"=="/?" GOTO SHOWHELP
-
-PUSHD "%~dp0"
-
-IF EXIST "..\..\..\build.user.bat" CALL "..\..\..\build.user.bat"
-
-IF NOT DEFINED MPCHC_GIT IF DEFINED GIT SET MPCHC_GIT=%GIT%
-IF NOT DEFINED MPCHC_MSYS IF DEFINED MSYS SET MPCHC_MSYS=%MSYS%
-
-IF NOT DEFINED MPCHC_MSYS (
-    ECHO ERROR: MPCHC_MSYS is not defined. Please set it to your MSYS2 root (e.g., C:\msys64).
-    GOTO MissingVar
-)
-
-IF NOT EXIST "%MPCHC_MSYS%" (
-    ECHO ERROR: MSYS2 directory not found at %MPCHC_MSYS%
-    GOTO MissingVar
-)
-
-REM Ensure MSYS2 bin is in PATH for sh execution
-SET PATH=%MPCHC_MSYS%\usr\bin;%MPCHC_MSYS%\mingw64\bin;%PATH%
-
-IF EXIST "%~dp0..\environments.bat" CALL "%~dp0..\environments.bat"
-
-:VarOk
-SET "BUILDTYPE=build"
-SET ARG=%*
-SET ARG=%ARG:/=%
-SET ARG=%ARG:-=%
-
-FOR %%A IN (%ARG%) DO (
-    IF /I "%%A" == "clean" SET "BUILDTYPE=clean"
-    IF /I "%%A" == "rebuild" SET "BUILDTYPE=rebuild"
-    IF /I "%%A" == "64" SET "BIT=64BIT=yes"
-    IF /I "%%A" == "Debug" SET "DEBUG=DEBUG=yes"
-)
-
-IF /I "%BUILDTYPE%" == "rebuild" (
-    SET "BUILDTYPE=clean"
-    CALL :SubMake clean
-    SET "BUILDTYPE=build"
-    CALL :SubMake
-    EXIT /B !MAKE_RETURN!
-) ELSE (
-    CALL :SubMake
-    EXIT /B !MAKE_RETURN!
-)
-
-:SubMake
-SETLOCAL
-IF "%BUILDTYPE%" == "clean" (
-    SET JOBS=1
-) ELSE (
-    SET "BUILDTYPE="
-    IF DEFINED NUMBER_OF_PROCESSORS (
-        SET JOBS=%NUMBER_OF_PROCESSORS%
-    ) ELSE (
-        SET JOBS=4
-    )
-)
-
-SET MAK="%~dp0\ffmpeg-msvc.mak"
-PUSHD ..\LAVFilters\src\ffmpeg\
-
-REM Check for NASM/YASM
-WHERE nasm >NUL 2>&1
-IF %ERRORLEVEL% NEQ 0 (
-    WHERE yasm >NUL 2>&1
-    IF %ERRORLEVEL% NEQ 0 (
-        ECHO WARNING: Neither nasm nor yasm found in PATH. FFmpeg build may fail.
-    )
-)
-
-CALL make.exe -f %MAK% %BUILDTYPE% -j%JOBS% %BIT% %DEBUG%
-ENDLOCAL
-IF %ERRORLEVEL% NEQ 0 SET MAKE_RETURN=%ERRORLEVEL%
-
-POPD
 EXIT /B
 
-:SHOWHELP
-ECHO Usage: %~nx0 [32^|64] [Clean^|Build^|Rebuild] [Debug]
+:End
+IF %ERRORLEVEL% NEQ 0 EXIT /B %ERRORLEVEL%
+POPD
+ENDLOCAL
+EXIT /B
+
+:SubMake
+IF %ERRORLEVEL% NEQ 0 EXIT /B
+IF /I "%ARCH%" == "x86" (SET "ARCHVS=Win32") ELSE (SET "ARCHVS=x64")
+
+REM =====================================================
+REM Build FFmpeg using bash directly
+REM =====================================================
+
+"C:\msys64\usr\bin\bash.exe" build_ffmpeg.sh %ARCH% %RELEASETYPE% %BUILDTYPE% %COMPILER%
+
+IF %ERRORLEVEL% NEQ 0 (
+    CALL "%COMMON%" :SubMsg "ERROR" "'build_ffmpeg.sh' failed!"
+    EXIT /B 1
+)
+
+PUSHD src
+
+REM =====================================================
+REM Build LAVFilters
+REM =====================================================
+
+MSBuild.exe LAVFilters.sln /nologo /consoleloggerparameters:Verbosity=minimal /nodeReuse:true /m /t:%BUILDTYPE% /property:Configuration=%RELEASETYPE%;Platform=%ARCHVS%
+
+IF %ERRORLEVEL% NEQ 0 (
+    CALL "%COMMON%" :SubMsg "ERROR" "MSBuild LAVFilters failed!"
+    POPD
+    EXIT /B 1
+)
+
+POPD
+
+IF /I "%RELEASETYPE%" == "Debug" (
+    SET "SRCFOLDER=src\bin_%ARCHVS%d"
+) ELSE (
+    SET "SRCFOLDER=src\bin_%ARCHVS%"
+)
+
+IF /I "%ARCH%" == "x64" (
+    SET "DESTFOLDER=%BIN_DIR%\mpc-hc_%ARCH%\LAVFilters64"
+) ELSE (
+    SET "DESTFOLDER=%BIN_DIR%\mpc-hc_%ARCH%\LAVFilters"
+)
+
+IF /I "%BUILDTYPE%" == "Build" (
+    IF NOT EXIST "%DESTFOLDER%" MD "%DESTFOLDER%"
+    COPY /Y /V "%SRCFOLDER%\*.dll" "%DESTFOLDER%" >NUL
+    COPY /Y /V "%SRCFOLDER%\*.ax" "%DESTFOLDER%" >NUL
+    COPY /Y /V "%SRCFOLDER%\*.manifest" "%DESTFOLDER%" >NUL
+)
+
 EXIT /B
 
 :MissingVar
 ECHO Not all build dependencies were found.
-ECHO See "..\..\..\..\..\docs\Compilation.md" for more information.
+ECHO See "%ROOT_DIR%\docs\Compilation.md" for more information.
+EXIT /B 1
+
+:UnsupportedSwitch
+ECHO Unsupported commandline switch!
+EXIT /B 1
+
+:ShowHelp
+ECHO Usage: %~nx0 [Clean^|Build^|Rebuild] [x86^|x64^|Both] [Debug^|Release] [VS2017^|VS2019]
+EXIT /B 1
+
+:ErrorExit
+POPD
 ENDLOCAL
 EXIT /B 1
