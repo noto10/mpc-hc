@@ -11,30 +11,29 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      #
-      # Checkout source
-      #
+      # =========================================================
+      # Checkout
+      # =========================================================
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: recursive
           fetch-depth: 0
 
-      #
+      # =========================================================
       # Install Windows SDK 8.1
-      #
-      # Required by legacy MPC-HC build scripts
-      #
+      # =========================================================
       - name: Install Windows SDK 8.1
         shell: pwsh
         run: |
           choco install windows-sdk-8.1 -y
 
-      #
+      # =========================================================
       # Setup MSYS2 / MinGW
       #
-      # path-type:minimal avoids catastrophic PATH growth
-      #
+      # CRITICAL:
+      # path-type:minimal prevents runaway PATH expansion
+      # =========================================================
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2
         with:
@@ -45,14 +44,15 @@ jobs:
           install: >-
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-binutils
+            mingw-w64-x86_64-pkg-config
             make
             yasm
             nasm
             diffutils
 
-      #
-      # Create MPC-HC environment overrides
-      #
+      # =========================================================
+      # Create MPC-HC build overrides
+      # =========================================================
       - name: Create build.user.bat
         shell: cmd
         run: |
@@ -61,9 +61,9 @@ jobs:
             echo SET MPCHC_GIT=C:\Program Files\Git
           ) > build.user.bat
 
-      #
-      # Main build
-      #
+      # =========================================================
+      # Main Build
+      # =========================================================
       - name: Build Release x64
         shell: cmd
         run: |
@@ -73,10 +73,27 @@ jobs:
           subst Z: "%GITHUB_WORKSPACE%"
 
           REM ==================================================
-          REM Preserve MSYS2 integration
+          REM Preserve MSYS activation semantics
           REM ==================================================
           set MSYSTEM=MINGW64
           set CHERE_INVOKING=1
+
+          REM ==================================================
+          REM HARD CLEAN PATH
+          REM
+          REM IMPORTANT:
+          REM DO NOT include:
+          REM   C:\msys64\usr\bin
+          REM   Git\usr\bin
+          REM
+          REM Those break legacy batch parsing and trigger:
+          REM   "The input line is too long"
+          REM   ". was unexpected at this time."
+          REM ==================================================
+          set "PATH=C:\Windows\system32"
+          set "PATH=%PATH%;C:\Windows"
+          set "PATH=%PATH%;C:\Windows\System32\WindowsPowerShell\v1.0"
+          set "PATH=%PATH%;C:\Program Files\PowerShell\7"
 
           REM ==================================================
           REM Load Visual Studio environment
@@ -84,29 +101,31 @@ jobs:
           call "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
 
           REM ==================================================
-          REM Force Windows SDK 8.1
+          REM Force SDK 8.1
           REM ==================================================
           set "WindowsSDKVersion=8.1\"
           set "WindowsSdkDir=C:\Program Files (x86)\Windows Kits\8.1\"
 
           REM ==================================================
-          REM Reduce only known PATH bloat
-          REM Do NOT fully reset PATH
-          REM ==================================================
-          set "PATH=%PATH:C:\Strawberry\perl\bin;=%"
-
-          REM ==================================================
-          REM Ensure MinGW tools are reachable
-          REM ==================================================
-          set "PATH=C:\msys64\mingw64\bin;%PATH%"
-
-          REM ==================================================
-          REM Ensure MSVC linker precedes GNU link.exe
+          REM Ensure MSVC tools take precedence
           REM ==================================================
           set "PATH=%VCToolsInstallDir%bin\Hostx64\x64;%PATH%"
 
           REM ==================================================
-          REM Debugging output
+          REM Add ONLY required non-MSVC tools
+          REM ==================================================
+          set "PATH=%PATH%;C:\Program Files\Git\bin"
+          set "PATH=%PATH%;C:\msys64\mingw64\bin"
+
+          REM ==================================================
+          REM Remove dangerous PATH pollution
+          REM ==================================================
+          set "PATH=%PATH:C:\msys64\usr\bin;=%"
+          set "PATH=%PATH:C:\Program Files\Git\usr\bin;=%"
+          set "PATH=%PATH:C:\Strawberry\perl\bin;=%"
+
+          REM ==================================================
+          REM Diagnostics
           REM ==================================================
           echo ======================================
           echo PATH LENGTH:
@@ -115,22 +134,20 @@ jobs:
 
           echo.
           echo ==== TOOL LOCATIONS ====
+          where cl
+          where link
           where gcc
           where x86_64-w64-mingw32-gcc
           where yasm
           where nasm
-          where cl
-          where link
-          where powershell
-          where pwsh
           echo ========================
           echo.
 
           REM ==================================================
-          REM Validate SDK 8.1 presence
+          REM Validate SDK
           REM ==================================================
           if not exist "C:\Program Files (x86)\Windows Kits\8.1\Include" (
-            echo ERROR: Windows SDK 8.1 Include directory missing
+            echo ERROR: Windows SDK 8.1 missing
             exit /b 1
           )
 
@@ -141,9 +158,9 @@ jobs:
 
           call build.bat release x64
 
-      #
+      # =========================================================
       # Upload artifacts
-      #
+      # =========================================================
       - name: Upload artifacts
         if: success()
         uses: actions/upload-artifact@v4
