@@ -11,6 +11,9 @@ jobs:
     timeout-minutes: 90
 
     steps:
+      #
+      # Checkout repository
+      #
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -18,10 +21,20 @@ jobs:
           fetch-depth: 0
 
       #
-      # MSYS2 / MinGW setup
+      # Install Windows SDK 8.1
+      #
+      # Required by older MPC-HC build scripts
+      #
+      - name: Install Windows SDK 8.1
+        shell: pwsh
+        run: |
+          choco install windows-sdk-8.1 -y
+
+      #
+      # Setup MSYS2 / MinGW
       #
       # path-type:minimal is critical:
-      # it prevents PATH explosion on Windows runners
+      # it avoids PATH explosion on Windows runners
       #
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2
@@ -38,7 +51,7 @@ jobs:
             diffutils
 
       #
-      # MPC-HC custom environment
+      # Create MPC-HC environment file
       #
       - name: Create build.user.bat
         shell: cmd
@@ -49,65 +62,75 @@ jobs:
           ) > build.user.bat
 
       #
-      # Main build step
-      #
-      # Fixes:
-      # - cmd.exe PATH overflow
-      # - batch parser corruption
-      # - ffmpeg.bat failures
-      # - LAVFilters build failures
-      # - PowerShell missing after PATH reset
+      # Main build
       #
       - name: Build Release x64
         shell: cmd
         run: |
-          REM =====================================
-          REM Short working path
-          REM =====================================
-          subst Z: .
+          REM ==========================================
+          REM Map repository to short drive path
+          REM ==========================================
+          subst Z: "%GITHUB_WORKSPACE%"
 
-          REM =====================================
+          REM ==========================================
           REM HARD RESET PATH
-          REM Keep only essential Windows paths
-          REM =====================================
+          REM Prevent Windows cmd overflow
+          REM ==========================================
           set "PATH=C:\Windows\system32;C:\Windows;C:\Windows\System32\WindowsPowerShell\v1.0"
 
-          REM =====================================
+          REM ==========================================
           REM Add PowerShell 7
-          REM =====================================
+          REM ==========================================
           set "PATH=%PATH%;C:\Program Files\PowerShell\7"
 
-          REM =====================================
-          REM Load Visual Studio environment ONCE
-          REM =====================================
+          REM ==========================================
+          REM Load Visual Studio environment
+          REM ==========================================
           call "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
 
-          REM =====================================
-          REM Add only required tools
-          REM =====================================
+          REM ==========================================
+          REM Force Windows SDK 8.1
+          REM ==========================================
+          set "WindowsSDKVersion=8.1\"
+          set "WindowsSdkDir=C:\Program Files (x86)\Windows Kits\8.1\"
+
+          REM ==========================================
+          REM Add ONLY required tools
+          REM Avoid GNU link.exe collisions
+          REM ==========================================
           set "PATH=%PATH%;C:\Program Files\Git\bin"
-          set "PATH=%PATH%;C:\Program Files\Git\usr\bin"
-          set "PATH=%PATH%;C:\msys64\usr\bin"
           set "PATH=%PATH%;C:\msys64\mingw64\bin"
 
-          REM =====================================
-          REM Debugging info
-          REM =====================================
+          REM ==========================================
+          REM Debugging
+          REM ==========================================
           echo ======================================
           echo PATH LENGTH:
           powershell -NoProfile -Command "$env:PATH.Length"
           echo ======================================
 
+          echo.
+          echo ==== TOOL LOCATIONS ====
           where cl
           where link
           where gcc
           where yasm
           where powershell
           where pwsh
+          echo ========================
+          echo.
 
-          REM =====================================
+          REM ==========================================
+          REM Verify SDK 8.1 exists
+          REM ==========================================
+          if not exist "C:\Program Files (x86)\Windows Kits\8.1\Include" (
+            echo ERROR: Windows SDK 8.1 Include directory missing
+            exit /b 1
+          )
+
+          REM ==========================================
           REM Start build
-          REM =====================================
+          REM ==========================================
           cd /d Z:\
 
           call build.bat release x64
