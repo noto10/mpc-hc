@@ -2,5 +2,8 @@ version: 1.0.{build}
 
 image: Visual Studio 2022
 
+configuration: Release
+platform: x64
+
 build_script:
-  - cmd: echo Hello from AppVeyor
+  - cmd: build.bat Build x64 Release
