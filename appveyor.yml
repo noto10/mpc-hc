@@ -6,28 +6,22 @@ configuration: Release
 platform: x64
 
 install:
-  # Submodules
+  # Init submodules
   - cmd: git submodule update --init --recursive
 
-  # Install NASM
+  # Install NASM via Chocolatey
   - cmd: choco install nasm -y
 
-  # Force-detect NASM location and add to PATH
-  - ps: |
-      $nasm = Get-ChildItem -Recurse "C:\ProgramData\chocolatey" -Filter nasm.exe | Select-Object -First 1
-      if (-not $nasm) { throw "NASM not found after install" }
+  # Refresh environment so PATH updates take effect
+  - cmd: refreshenv
 
-      $nasmDir = $nasm.DirectoryName
-      Write-Host "NASM found at $nasmDir"
-
-      $env:PATH = "$nasmDir;$env:PATH"
-      [Environment]::SetEnvironmentVariable("PATH", $env:PATH, "Machine")
-
-  # Verify NASM
+  # Debug: verify NASM is available
   - cmd: where nasm
+
+  # Verify NASM works
   - cmd: nasm -v
 
-  # Install YASM manually
+  # Install YASM manually (Chocolatey package is broken)
   - ps: |
       Invoke-WebRequest https://www.tortall.net/projects/yasm/releases/yasm-1.3.0-win64.exe -OutFile yasm.exe
       New-Item -ItemType Directory -Force -Path C:\yasm
@@ -36,8 +30,10 @@ install:
       $env:PATH = "C:\yasm;$env:PATH"
       [Environment]::SetEnvironmentVariable("PATH", $env:PATH, "Machine")
 
-  # Verify YASM
+  # Debug: verify YASM is available
   - cmd: where yasm
+
+  # Verify YASM works
   - cmd: yasm --version
 
 build_script:
