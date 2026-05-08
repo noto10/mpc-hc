@@ -18,6 +18,7 @@ REM along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
 SETLOCAL EnableDelayedExpansion
+SET "NO_LAV=True"
 
 SET ARG=/%*
 SET ARG=%ARG:/=%
