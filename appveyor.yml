@@ -6,24 +6,23 @@ configuration: Release
 platform: x64
 
 install:
-  # Ensure submodules are present
+  # Submodules
   - cmd: git submodule update --init --recursive
 
-  # Install known assembler tools via Chocolatey
+  # Install NASM (works fine via choco)
   - cmd: choco install nasm -y
-  - cmd: choco install yasm -y
 
-  # Refresh PATH so newly installed tools are visible
-  - cmd: refreshenv
+  # Manually install YASM (avoid broken choco package)
+  - ps: |
+      Invoke-WebRequest https://www.tortall.net/projects/yasm/releases/yasm-1.3.0-win64.exe -OutFile yasm.exe
+      New-Item -ItemType Directory -Force -Path C:\yasm
+      Move-Item yasm.exe C:\yasm\yasm.exe
+      $env:PATH = "C:\yasm;$env:PATH"
+      [Environment]::SetEnvironmentVariable("PATH", $env:PATH, "Machine")
 
-before_build:
-  # Print toolchain info for debugging
-  - cmd: echo ==== TOOLCHAIN VERSIONS ====
-  - cmd: where yasm
-  - cmd: where nasm
-  - cmd: yasm --version
+  # Verify tools exist
   - cmd: nasm -v
-  - cmd: echo ============================
+  - cmd: yasm --version
 
 build_script:
   - cmd: build.bat Build x64 Release
