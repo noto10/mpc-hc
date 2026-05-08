@@ -1,12 +1,29 @@
 version: 1.0.{build}
- 
+
 image: Visual Studio 2022
 
 configuration: Release
 platform: x64
 
 install:
+  # Ensure submodules are present
   - cmd: git submodule update --init --recursive
+
+  # Install known assembler tools via Chocolatey
+  - cmd: choco install nasm -y
+  - cmd: choco install yasm -y
+
+  # Refresh PATH so newly installed tools are visible
+  - cmd: refreshenv
+
+before_build:
+  # Print toolchain info for debugging
+  - cmd: echo ==== TOOLCHAIN VERSIONS ====
+  - cmd: where yasm
+  - cmd: where nasm
+  - cmd: yasm --version
+  - cmd: nasm -v
+  - cmd: echo ============================
 
 build_script:
   - cmd: build.bat Build x64 Release
