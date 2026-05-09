@@ -6,18 +6,21 @@ configuration: Release
 platform: x64
 
 install:
-  # Get submodules
   - cmd: git submodule update --init --recursive
 
-  # Install NASM (Chocolatey handles PATH correctly after refreshenv)
-  - cmd: choco install nasm -y
-  - cmd: refreshenv
+  # --- INSTALL NASM (manual, reliable) ---
+  - ps: |
+      Invoke-WebRequest https://www.nasm.us/pub/nasm/releasebuilds/2.16.01/win64/nasm-2.16.01-win64.zip -OutFile nasm.zip
+      Expand-Archive nasm.zip -DestinationPath C:\tools\nasm
+      $nasmDir = Get-ChildItem C:\tools\nasm | Select-Object -First 1
+      $env:PATH = "$($nasmDir.FullName);$env:PATH"
+      [Environment]::SetEnvironmentVariable("PATH", $env:PATH, "Machine")
 
   # Verify NASM
   - cmd: where nasm
   - cmd: nasm -v
 
-  # Install YASM (manual, simple + reliable)
+  # --- INSTALL YASM ---
   - ps: |
       Invoke-WebRequest https://www.tortall.net/projects/yasm/releases/yasm-1.3.0-win64.exe -OutFile yasm.exe
       New-Item -ItemType Directory -Force -Path C:\tools\yasm
@@ -30,10 +33,10 @@ install:
   - cmd: yasm --version
 
 build_script:
-  # --- BUILD THIRD-PARTY LIBS (CRITICAL STEP) ---
+  # Build dependencies (FFmpeg etc.)
   - cmd: cd src\thirdparty
   - cmd: build.bat x64 Release
 
-  # --- BUILD MAIN PROJECT ---
+  # Build MPC-HC
   - cmd: cd ..\..
   - cmd: build.bat Build x64 Release
