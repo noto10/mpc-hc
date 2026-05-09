@@ -8,6 +8,7 @@ platform: x64
 clone_depth: 1
 
 install:
+  # --- Submodules ---
   - cmd: git submodule update --init --recursive
 
   # --- NASM ---
@@ -19,6 +20,8 @@ install:
 
       $nasmDir = (Get-ChildItem C:\tools\nasm | Select-Object -First 1).FullName
       $env:PATH = "$nasmDir;$env:PATH"
+
+      Write-Host "NASM path: $nasmDir"
 
   - cmd: where nasm
   - cmd: nasm -v
@@ -34,21 +37,27 @@ install:
 
       $env:PATH = "C:\tools\yasm;$env:PATH"
 
+      Write-Host "YASM installed"
+
   - cmd: where yasm
   - cmd: yasm --version
 
-  # --- DOWNLOAD PREBUILT FFMPEG (CRITICAL FIX) ---
+  # --- Prebuilt dependencies (includes FFmpeg libs) ---
   - ps: |
       $ErrorActionPreference = "Stop"
 
-      Invoke-WebRequest https://github.com/clsid2/mpc-hc/releases/download/2.0.0/ffmpeg-libs-x64.zip -OutFile ffmpeg.zip
+      Invoke-WebRequest https://github.com/clsid2/mpc-hc/releases/download/1.9.24/mpc-hc-deps-x64.zip -OutFile deps.zip
+
+      Expand-Archive deps.zip -DestinationPath C:\deps
 
       New-Item -ItemType Directory -Force -Path C:\projects\mpc-hc\bin\lib\Release_x64 | Out-Null
-      Expand-Archive ffmpeg.zip -DestinationPath C:\temp_ffmpeg
 
-      Copy-Item C:\temp_ffmpeg\lib\*.lib C:\projects\mpc-hc\bin\lib\Release_x64\ -Recurse
+      Copy-Item C:\deps\lib\*.lib C:\projects\mpc-hc\bin\lib\Release_x64\ -Recurse
+
+      Write-Host "Dependencies installed"
 
 build_script:
+  # --- Build MPC-HC ---
   - cmd: build.bat Build x64 Release
 
 artifacts:
