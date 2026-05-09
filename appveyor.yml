@@ -8,16 +8,43 @@ platform: x64
 clone_depth: 1
 
 install:
+  # --- Get submodules ---
   - cmd: git submodule update --init --recursive
 
+  # --- Install NASM ---
+  - ps: |
+      $ErrorActionPreference = "Stop"
+
+      Invoke-WebRequest https://www.nasm.us/pub/nasm/releasebuilds/2.16.01/win64/nasm-2.16.01-win64.zip -OutFile nasm.zip
+      Expand-Archive nasm.zip -DestinationPath C:\tools\nasm
+
+      $nasmDir = (Get-ChildItem C:\tools\nasm | Select-Object -First 1).FullName
+      $env:PATH = "$nasmDir;$env:PATH"
+
+      Write-Host "NASM path: $nasmDir"
+
+  - cmd: where nasm
+  - cmd: nasm -v
+
+  # --- Install YASM ---
+  - ps: |
+      $ErrorActionPreference = "Stop"
+
+      Invoke-WebRequest https://www.tortall.net/projects/yasm/releases/yasm-1.3.0-win64.exe -OutFile yasm.exe
+
+      New-Item -ItemType Directory -Force -Path C:\tools\yasm | Out-Null
+      Move-Item yasm.exe C:\tools\yasm\yasm.exe
+
+      $env:PATH = "C:\tools\yasm;$env:PATH"
+
+      Write-Host "YASM installed"
+
+  - cmd: where yasm
+  - cmd: yasm --version
+
 build_script:
-  - cmd: msbuild mpc-hc.sln ^
-        /p:Configuration=Release ^
-        /p:Platform=x64 ^
-        /p:UseLibass=false ^
-        /p:UseHarfbuzz=false ^
-        /p:UseFreetype=false ^
-        /t:mpc-hc
+  # --- Build EVERYTHING (this builds FFmpeg, freetype, etc properly) ---
+  - cmd: build.bat Build x64 Release
 
 artifacts:
   - path: bin\*
