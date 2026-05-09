@@ -11,21 +11,20 @@ install:
   # Install NASM
   - cmd: choco install nasm -y
 
-  # 🔍 Get actual install path from Chocolatey (reliable)
+  # 🔍 Find NASM anywhere on disk (reliable)
   - ps: |
-      $pkg = choco list --local-only --exact nasm | Select-String "nasm"
-      if (-not $pkg) { throw "NASM package not found" }
+      $nasm = Get-ChildItem -Path "C:\" -Filter nasm.exe -Recurse -ErrorAction SilentlyContinue |
+              Where-Object { $_.FullName -notlike "*\Windows\*" } |
+              Select-Object -First 1
 
-      $nasmExe = Get-ChildItem "C:\Program Files\NASM" -Filter nasm.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-
-      if (-not $nasmExe) {
-          throw "NASM exe not found in expected location"
+      if (-not $nasm) {
+          throw "NASM not found anywhere on disk"
       }
 
-      $nasmDir = $nasmExe.DirectoryName
-      Write-Host "NASM found at $nasmDir"
+      $dir = $nasm.DirectoryName
+      Write-Host "NASM found at $dir"
 
-      $env:PATH = "$nasmDir;$env:PATH"
+      $env:PATH = "$dir;$env:PATH"
       [Environment]::SetEnvironmentVariable("PATH", $env:PATH, "Machine")
 
   # Verify NASM
