@@ -6,42 +6,34 @@ configuration: Release
 platform: x64
 
 install:
+  # Get submodules
   - cmd: git submodule update --init --recursive
 
-  # Install NASM
+  # Install NASM (Chocolatey handles PATH correctly after refreshenv)
   - cmd: choco install nasm -y
-
-  # 🔍 Find NASM anywhere on disk (reliable)
-  - ps: |
-      $nasm = Get-ChildItem -Path "C:\" -Filter nasm.exe -Recurse -ErrorAction SilentlyContinue |
-              Where-Object { $_.FullName -notlike "*\Windows\*" } |
-              Select-Object -First 1
-
-      if (-not $nasm) {
-          throw "NASM not found anywhere on disk"
-      }
-
-      $dir = $nasm.DirectoryName
-      Write-Host "NASM found at $dir"
-
-      $env:PATH = "$dir;$env:PATH"
-      [Environment]::SetEnvironmentVariable("PATH", $env:PATH, "Machine")
+  - cmd: refreshenv
 
   # Verify NASM
   - cmd: where nasm
   - cmd: nasm -v
 
-  # Install YASM
+  # Install YASM (manual, simple + reliable)
   - ps: |
       Invoke-WebRequest https://www.tortall.net/projects/yasm/releases/yasm-1.3.0-win64.exe -OutFile yasm.exe
-      New-Item -ItemType Directory -Force -Path C:\yasm
-      Move-Item yasm.exe C:\yasm\yasm.exe
-
-      $env:PATH = "C:\yasm;$env:PATH"
+      New-Item -ItemType Directory -Force -Path C:\tools\yasm
+      Move-Item yasm.exe C:\tools\yasm\yasm.exe
+      $env:PATH = "C:\tools\yasm;$env:PATH"
       [Environment]::SetEnvironmentVariable("PATH", $env:PATH, "Machine")
 
+  # Verify YASM
   - cmd: where yasm
   - cmd: yasm --version
 
 build_script:
+  # --- BUILD THIRD-PARTY LIBS (CRITICAL STEP) ---
+  - cmd: cd src\thirdparty
+  - cmd: build.bat x64 Release
+
+  # --- BUILD MAIN PROJECT ---
+  - cmd: cd ..\..
   - cmd: build.bat Build x64 Release
