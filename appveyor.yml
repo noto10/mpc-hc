@@ -10,46 +10,14 @@ clone_depth: 1
 install:
   - cmd: git submodule update --init --recursive
 
-  # --- Stub all required libs ---
-  - ps: |
-      $ErrorActionPreference = "Stop"
-
-      $libDir = "C:\projects\mpc-hc\bin\lib\Release_x64"
-      New-Item -ItemType Directory -Force -Path $libDir | Out-Null
-
-      $libs = @(
-        # FFmpeg
-        "avcodec.lib",
-        "avformat.lib",
-        "avutil.lib",
-        "swscale.lib",
-        "swresample.lib",
-        "postproc.lib",
-
-        # subtitles / fonts
-        "freetype2.lib",
-        "harfbuzz.lib",
-        "libass.lib",
-
-        # common deps
-        "zlib.lib",
-        "bz2.lib",
-        "iconv.lib",
-        "libpng.lib",
-        "expat.lib"
-      )
-
-      foreach ($lib in $libs) {
-        $path = Join-Path $libDir $lib
-        if (!(Test-Path $path)) {
-          New-Item -ItemType File -Path $path | Out-Null
-        }
-      }
-
-      Write-Host "Stub libs created"
-
 build_script:
-  - cmd: msbuild mpc-hc.sln /p:Configuration=Release /p:Platform=x64 /p:UseYasm=false
+  - cmd: msbuild mpc-hc.sln ^
+        /p:Configuration=Release ^
+        /p:Platform=x64 ^
+        /p:UseLibass=false ^
+        /p:UseHarfbuzz=false ^
+        /p:UseFreetype=false ^
+        /t:mpc-hc
 
 artifacts:
   - path: bin\*
