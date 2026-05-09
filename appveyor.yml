@@ -10,7 +10,7 @@ clone_depth: 1
 install:
   - cmd: git submodule update --init --recursive
 
-  # --- Create dummy FFmpeg libs so linker is satisfied ---
+  # --- Stub all required libs ---
   - ps: |
       $ErrorActionPreference = "Stop"
 
@@ -18,12 +18,25 @@ install:
       New-Item -ItemType Directory -Force -Path $libDir | Out-Null
 
       $libs = @(
+        # FFmpeg
         "avcodec.lib",
         "avformat.lib",
         "avutil.lib",
         "swscale.lib",
         "swresample.lib",
-        "postproc.lib"
+        "postproc.lib",
+
+        # subtitles / fonts
+        "freetype2.lib",
+        "harfbuzz.lib",
+        "libass.lib",
+
+        # common deps
+        "zlib.lib",
+        "bz2.lib",
+        "iconv.lib",
+        "libpng.lib",
+        "expat.lib"
       )
 
       foreach ($lib in $libs) {
@@ -33,10 +46,10 @@ install:
         }
       }
 
-      Write-Host "Stub FFmpeg libs created"
+      Write-Host "Stub libs created"
 
 build_script:
-  - cmd: msbuild mpc-hc.sln /p:Configuration=Release /p:Platform=x64
+  - cmd: msbuild mpc-hc.sln /p:Configuration=Release /p:Platform=x64 /p:UseYasm=false
 
 artifacts:
   - path: bin\*
