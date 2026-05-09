@@ -5,32 +5,52 @@ image: Visual Studio 2022
 configuration: Release
 platform: x64
 
+clone_depth: 1
+
 install:
-  # Get submodules
+  # Ensure submodules are present
   - cmd: git submodule update --init --recursive
 
-  # Install NASM (portable, reliable)
+  # --- Install NASM (portable, deterministic) ---
   - ps: |
+      $ErrorActionPreference = "Stop"
+
       Invoke-WebRequest https://www.nasm.us/pub/nasm/releasebuilds/2.16.01/win64/nasm-2.16.01-win64.zip -OutFile nasm.zip
       Expand-Archive nasm.zip -DestinationPath C:\tools\nasm
-      $nasmDir = Get-ChildItem C:\tools\nasm | Select-Object -First 1 USD (1.3 SGD) (13 SGD (13 SGD))
 
-      [Environment]::SetEnvironmentVariable("PATH", $env:PATH, "Machine")
+      $nasmDir = (Get-ChildItem C:\tools\nasm | Select-Object -First 1).FullName
+      $env:PATH = "$nasmDir;$env:PATH"
+
+      Write-Host "NASM path: $nasmDir"
 
   - cmd: where nasm
   - cmd: nasm -v
 
-  # Install YASM (portable)
+  # --- Install YASM (portable) ---
   - ps: |
+      $ErrorActionPreference = "Stop"
+
       Invoke-WebRequest https://www.tortall.net/projects/yasm/releases/yasm-1.3.0-win64.exe -OutFile yasm.exe
-      New-Item -ItemType Directory -Force -Path C:\tools\yasm
+
+      New-Item -ItemType Directory -Force -Path C:\tools\yasm | Out-Null
       Move-Item yasm.exe C:\tools\yasm\yasm.exe
+
       $env:PATH = "C:\tools\yasm;$env:PATH"
-      [Environment]::SetEnvironmentVariable("PATH", $env:PATH, "Machine")
+
+      Write-Host "YASM installed"
 
   - cmd: where yasm
   - cmd: yasm --version
 
 build_script:
-  # IMPORTANT: run from repo root
+  # --- Build third-party dependencies (FFmpeg etc.) ---
+  - cmd: cd src\thirdparty
   - cmd: build.bat x64 Release
+
+  # --- Build MPC-HC ---
+  - cmd: cd ..\..
+  - cmd: build.bat Build x64 Release
+
+artifacts:
+  - path: bin\*
+    name: mpc-hc-build
