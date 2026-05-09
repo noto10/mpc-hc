@@ -37,16 +37,19 @@ install:
   - cmd: where yasm
   - cmd: yasm --version
 
+  # --- DOWNLOAD PREBUILT FFMPEG (CRITICAL FIX) ---
+  - ps: |
+      $ErrorActionPreference = "Stop"
+
+      Invoke-WebRequest https://github.com/clsid2/mpc-hc/releases/download/2.0.0/ffmpeg-libs-x64.zip -OutFile ffmpeg.zip
+
+      New-Item -ItemType Directory -Force -Path C:\projects\mpc-hc\bin\lib\Release_x64 | Out-Null
+      Expand-Archive ffmpeg.zip -DestinationPath C:\temp_ffmpeg
+
+      Copy-Item C:\temp_ffmpeg\lib\*.lib C:\projects\mpc-hc\bin\lib\Release_x64\ -Recurse
+
 build_script:
-  # 🔴 Build LAVFilters (THIS builds FFmpeg + ffmpeg.lib)
-  - cmd: cd src\thirdparty\LAVFilters
-  - cmd: build_lavfilters.bat
-
-  # Back to root
-  - cmd: cd ..\..\..
-
-  # Build MPC-HC
-  - cmd: build.bat Release x64
+  - cmd: build.bat Build x64 Release
 
 artifacts:
   - path: bin\*
