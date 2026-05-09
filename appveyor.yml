@@ -43,8 +43,14 @@ install:
   - cmd: yasm --version
 
 build_script:
-  # --- Build EVERYTHING (including FFmpeg) ---
-  - cmd: build.bat Clean
+  # --- Build LAVFilters (this builds FFmpeg) ---
+  - cmd: cd src\thirdparty\LAVFilters
+  - cmd: build_lavfilters.bat
+
+  # --- Go back to root ---
+  - cmd: cd ..\..\..
+
+  # --- Build MPC-HC ---
   - cmd: build.bat Release x64
   
 artifacts:
