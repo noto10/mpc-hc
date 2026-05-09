@@ -8,10 +8,9 @@ platform: x64
 clone_depth: 1
 
 install:
-  # Get submodules
   - cmd: git submodule update --init --recursive
 
-  # --- Install NASM (portable, deterministic) ---
+  # --- NASM ---
   - ps: |
       $ErrorActionPreference = "Stop"
 
@@ -21,12 +20,10 @@ install:
       $nasmDir = (Get-ChildItem C:\tools\nasm | Select-Object -First 1).FullName
       $env:PATH = "$nasmDir;$env:PATH"
 
-      Write-Host "NASM path: $nasmDir"
-
   - cmd: where nasm
   - cmd: nasm -v
 
-  # --- Install YASM (portable) ---
+  # --- YASM ---
   - ps: |
       $ErrorActionPreference = "Stop"
 
@@ -37,13 +34,18 @@ install:
 
       $env:PATH = "C:\tools\yasm;$env:PATH"
 
-      Write-Host "YASM installed"
-
   - cmd: where yasm
   - cmd: yasm --version
 
 build_script:
-  # Use repo's official build orchestration
+  # 🔴 Build LAVFilters (THIS builds FFmpeg + ffmpeg.lib)
+  - cmd: cd src\thirdparty\LAVFilters
+  - cmd: build_lavfilters.bat
+
+  # Back to root
+  - cmd: cd ..\..\..
+
+  # Build MPC-HC
   - cmd: build.bat Release x64
 
 artifacts:
