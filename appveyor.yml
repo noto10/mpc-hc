@@ -8,34 +8,33 @@ platform: x64
 clone_depth: 1
 
 install:
-  # --- Get submodules ---
+  # --- Submodules ---
   - cmd: git submodule update --init --recursive
 
-  # --- Download official MPC-HC prebuilt deps ---
+  # --- Provide minimal fallback libs (ONLY if missing) ---
   - ps: |
       $ErrorActionPreference = "Stop"
 
-      $url = "https://github.com/clsid2/mpc-hc/releases/download/2.0.0/mpc-hc-deps-x64.zip"
-      $out = "deps.zip"
+      $libPath = "C:\projects\mpc-hc\bin\lib\Release_x64"
+      New-Item -ItemType Directory -Force -Path $libPath | Out-Null
 
-      Write-Host "Downloading deps..."
-      Invoke-WebRequest $url -OutFile $out
+      if (!(Test-Path "$libPath\ffmpeg.lib")) {
+          Write-Host "ffmpeg.lib missing → injecting fallback build"
 
-      Expand-Archive $out -DestinationPath C:\deps
+          # lightweight fallback (prepacked libs repo)
+          git clone https://github.com/shiftmedia/ffmpeg-builds temp_ffmpeg
 
-      # Ensure target directory exists
-      New-Item -ItemType Directory -Force -Path C:\projects\mpc-hc\bin\lib\Release_x64 | Out-Null
+          Copy-Item temp_ffmpeg\lib\*.lib $libPath -Recurse -ErrorAction SilentlyContinue
 
-      # Copy all libs (includes ffmpeg.lib)
-      Copy-Item C:\deps\lib\*.lib C:\projects\mpc-hc\bin\lib\Release_x64\ -Recurse
-
-      Write-Host "Dependencies installed"
-
-  # --- Sanity check ---
-  - cmd: dir C:\projects\mpc-hc\bin\lib\Release_x64
+          if (!(Test-Path "$libPath\ffmpeg.lib")) {
+              Write-Error "ffmpeg.lib still missing after fallback!"
+          }
+      }
+      else {
+          Write-Host "ffmpeg.lib already present"
+      }
 
 build_script:
-  # --- Clean + build ---
   - cmd: build.bat Clean
   - cmd: build.bat Release x64
 
