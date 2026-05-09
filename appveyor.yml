@@ -8,7 +8,7 @@ platform: x64
 clone_depth: 1
 
 install:
-  # Ensure submodules are present
+  # Get submodules
   - cmd: git submodule update --init --recursive
 
   # --- Install NASM (portable, deterministic) ---
@@ -43,16 +43,8 @@ install:
   - cmd: yasm --version
 
 build_script:
-  # Build FFmpeg (this is what produces ffmpeg.lib)
-  - cmd: cd src\thirdparty\ffmpeg
-  - cmd: build.bat
-
-  # Go back to repo root
-  - cmd: cd ..\..\..
-
-  # Build MPC-HC
-  - cmd: build.bat Build x64 Release
+  # Use repo's official build orchestration
+  - cmd: build.bat Release x64
 
 artifacts:
   - path: bin\*
-    name: mpc-hc-build
