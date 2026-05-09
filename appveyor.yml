@@ -8,33 +8,43 @@ platform: x64
 clone_depth: 1
 
 install:
-  # --- Submodules ---
   - cmd: git submodule update --init --recursive
 
-  # --- Provide minimal fallback libs (ONLY if missing) ---
+  # --- NASM ---
   - ps: |
-      $ErrorActionPreference = "Stop"
+      Invoke-WebRequest https://www.nasm.us/pub/nasm/releasebuilds/2.16.01/win64/nasm-2.16.01-win64.zip -OutFile nasm.zip
+      Expand-Archive nasm.zip -DestinationPath C:\tools\nasm
+      $nasmDir = (Get-ChildItem C:\tools\nasm | Select-Object -First 1).FullName
+      $env:PATH = "$nasmDir;$env:PATH"
 
-      $libPath = "C:\projects\mpc-hc\bin\lib\Release_x64"
-      New-Item -ItemType Directory -Force -Path $libPath | Out-Null
+  # --- YASM ---
+  - ps: |
+      Invoke-WebRequest https://www.tortall.net/projects/yasm/releases/yasm-1.3.0-win64.exe -OutFile yasm.exe
+      New-Item -ItemType Directory -Force -Path C:\tools\yasm | Out-Null
+      Move-Item yasm.exe C:\tools\yasm\yasm.exe
+      $env:PATH = "C:\tools\yasm;$env:PATH"
 
-      if (!(Test-Path "$libPath\ffmpeg.lib")) {
-          Write-Host "ffmpeg.lib missing → injecting fallback build"
-
-          # lightweight fallback (prepacked libs repo)
-          git clone https://github.com/shiftmedia/ffmpeg-builds temp_ffmpeg
-
-          Copy-Item temp_ffmpeg\lib\*.lib $libPath -Recurse -ErrorAction SilentlyContinue
-
-          if (!(Test-Path "$libPath\ffmpeg.lib")) {
-              Write-Error "ffmpeg.lib still missing after fallback!"
-          }
-      }
-      else {
-          Write-Host "ffmpeg.lib already present"
-      }
+  # --- MinGW ---
+  - ps: |
+      Invoke-WebRequest https://github.com/brechtsanders/winlibs_mingw/releases/download/12.2.0-16.0.0-10.0.0-ucrt-r5/winlibs-x86_64-posix-seh-gcc-12.2.0-llvm-16.0.0-mingw-w64ucrt-10.0.0-r5.7z -OutFile mingw.7z
+      7z x mingw.7z -oC:\tools\mingw | Out-Null
+      $gcc = Get-ChildItem -Recurse C:\tools\mingw -Filter x86_64-w64-mingw32-gcc.exe | Select-Object -First 1
+      $env:PATH = "$($gcc.Directory.FullName);$env:PATH"
 
 build_script:
+  # --- Build FFmpeg via LAVFilters (FORCED + VERIFIED) ---
+  - cmd: cd src\thirdparty\LAVFilters
+
+  # Force verbose + fail-fast
+  - cmd: call build_lavfilters.bat || exit /b 1
+
+  # HARD CHECK
+  - cmd: if not exist "..\..\..\bin\lib\Release_x64\ffmpeg.lib" exit /b 1
+
+  # --- Back to root ---
+  - cmd: cd ..\..\..
+
+  # --- Build MPC-HC ---
   - cmd: build.bat Clean
   - cmd: build.bat Release x64
 
